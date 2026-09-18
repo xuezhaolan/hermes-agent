@@ -542,6 +542,8 @@ _PROVIDER_ALIASES = {
     "tencent": "tencent-tokenhub", "tokenhub": "tencent-tokenhub", "tencent-cloud": "tencent-tokenhub",
     "tencentmaas": "tencent-tokenhub",
     "tokenplan": "tencent-tokenplan", "tencent-lkeap": "tencent-tokenplan",
+    "opencode": "opencode-zen", "zen": "opencode-zen",
+    "go": "opencode-go", "opencode-go-sub": "opencode-go",
     **_LOCAL_SERVER_ALIASES,
 }
 

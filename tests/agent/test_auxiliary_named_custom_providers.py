@@ -415,6 +415,18 @@ class TestCustomProviderAliasCollision:
         assert client.api_key == "override-key"
 
 
+class TestOpenCodeAuxProviderAliases:
+    """Auxiliary provider normalization mirrors CLI auth aliases for OpenCode."""
+
+    def test_bare_opencode_aliases_route_to_builtin_families(self):
+        from agent.auxiliary_client import _normalize_aux_provider
+
+        assert _normalize_aux_provider("opencode") == "opencode-zen"
+        assert _normalize_aux_provider("zen") == "opencode-zen"
+        assert _normalize_aux_provider("go") == "opencode-go"
+        assert _normalize_aux_provider("opencode-go-sub") == "opencode-go"
+
+
 class TestResolveProviderClientMainRuntimeCustom:
     """When the main agent uses a named custom provider (custom:<name>),
     resolve_provider_client('custom', ..., main_runtime=...) must reuse the
