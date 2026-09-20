@@ -1,10 +1,12 @@
 """Regression tests for #53009: chat -q final response erased by exit-summary clear."""
 
 from types import SimpleNamespace
+import subprocess
 
 import pytest
 
 import cli as cli_mod
+from hermes_cli.cli_session_mixin import CLISessionMixin
 
 
 # ── A3.1 Test-First: verify _clear_terminal_on_exit gating ──────────────────
@@ -150,3 +152,99 @@ def test_print_exit_summary_still_clears_in_interactive_path(monkeypatch):
     assert "clear" in calls, (
         "Interactive mode should still clear the screen (regression test for #38928)"
     )
+
+
+def test_clear_terminal_fallback_uses_subprocess_without_shell(monkeypatch):
+    class BrokenStream:
+        def isatty(self):
+            return True
+
+        def write(self, _text):
+            raise OSError("ansi write failed")
+
+        def flush(self):
+            raise AssertionError("flush should not run after write fails")
+
+    calls = []
+    monkeypatch.setattr("sys.stdout", BrokenStream())
+    monkeypatch.setattr("hermes_cli.cli_session_mixin.shutil.which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr("hermes_cli.cli_session_mixin.windows_hide_flags", lambda: 123)
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("hermes_cli.cli_session_mixin.subprocess.run", fake_run)
+
+    CLISessionMixin()._clear_terminal_on_exit()
+
+    assert calls == [
+        (
+            ["/bin/clear"],
+            {
+                "check": False,
+                "stdin": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "creationflags": 123,
+            },
+        )
+    ]
+
+
+def test_clear_terminal_fallback_skips_when_clear_binary_missing(monkeypatch):
+    class BrokenStream:
+        def isatty(self):
+            return True
+
+        def write(self, _text):
+            raise OSError("ansi write failed")
+
+        def flush(self):
+            raise AssertionError("flush should not run after write fails")
+
+    monkeypatch.setattr("sys.stdout", BrokenStream())
+    monkeypatch.setattr("hermes_cli.cli_session_mixin.shutil.which", lambda _name: None)
+    monkeypatch.setattr(
+        "hermes_cli.cli_session_mixin.subprocess.run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("subprocess should not run")),
+    )
+
+    CLISessionMixin()._clear_terminal_on_exit()
+
+
+def test_clear_terminal_windows_fallback_uses_cmd_builtin_without_shell(monkeypatch):
+    class BrokenStream:
+        def isatty(self):
+            return True
+
+        def write(self, _text):
+            raise OSError("ansi write failed")
+
+        def flush(self):
+            raise AssertionError("flush should not run after write fails")
+
+    calls = []
+    monkeypatch.setattr("sys.stdout", BrokenStream())
+    monkeypatch.setattr("hermes_cli.cli_session_mixin.os.name", "nt")
+    monkeypatch.setenv("COMSPEC", r"C:\Windows\System32\cmd.exe")
+    monkeypatch.setattr("hermes_cli.cli_session_mixin.windows_hide_flags", lambda: 123)
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("hermes_cli.cli_session_mixin.subprocess.run", fake_run)
+
+    CLISessionMixin()._clear_terminal_on_exit()
+
+    assert calls == [
+        (
+            [r"C:\Windows\System32\cmd.exe", "/d", "/c", "cls"],
+            {
+                "check": False,
+                "stdin": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "creationflags": 123,
+            },
+        )
+    ]

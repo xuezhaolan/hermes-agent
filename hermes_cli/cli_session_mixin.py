@@ -10,9 +10,11 @@ from __future__ import annotations
 import contextlib
 import os
 import shutil
+import subprocess
 import sys
 
 from hermes_constants import get_hermes_home
+from hermes_cli._subprocess_compat import windows_hide_flags
 from hermes_state_ids import new_session_id
 from pathlib import Path
 from rich.console import Console
@@ -1012,7 +1014,8 @@ class CLISessionMixin:
     def _clear_terminal_on_exit(self):
         """Clear screen + scrollback (``ESC[3J ESC[2J ESC[H``) so nothing is stranded above
         the exit summary. Only safe after ``app.run()`` returned and prompt_toolkit restored
-        terminal modes. Skips when stdout isn't a console; falls back to ``clear``/``cls``."""
+        terminal modes. Skips when stdout isn't a console; falls back to ``clear``/``cls`` without
+        invoking a shell."""
         try:
             stream = sys.stdout
             if stream is None or not stream.isatty():
@@ -1023,10 +1026,23 @@ class CLISessionMixin:
             stream.write("\033[3J\033[2J\033[H")
             stream.flush()
         except Exception:
+            if os.name == "nt":
+                command = [os.environ.get("COMSPEC") or "cmd.exe", "/d", "/c", "cls"]
+            else:
+                clear = shutil.which("clear")
+                if not clear:
+                    return
+                command = [clear]
             try:
-                os.system("cls" if os.name == "nt" else "clear")
+                subprocess.run(
+                    command,
+                    check=False,
+                    stdin=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=windows_hide_flags(),
+                )
             except Exception:
-                pass
+                return
 
     def _persist_active_session_before_close(self):
         """Best-effort flush of the agent's live ``_session_messages`` before ``end_session()``
